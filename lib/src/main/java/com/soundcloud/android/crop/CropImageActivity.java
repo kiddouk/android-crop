@@ -67,6 +67,9 @@ public class CropImageActivity extends MonitoredActivity {
     @Override
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
+        // Set default result code in case of a Back Button
+        setResult(RESULT_CANCELED);
+
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.crop__activity_crop);
         initViews();
@@ -87,13 +90,6 @@ public class CropImageActivity extends MonitoredActivity {
             public void recycle(Bitmap b) {
                 b.recycle();
                 System.gc();
-            }
-        });
-
-        findViewById(R.id.btn_cancel).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                setResult(RESULT_CANCELED);
-                finish();
             }
         });
 
