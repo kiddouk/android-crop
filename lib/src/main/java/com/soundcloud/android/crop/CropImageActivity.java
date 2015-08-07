@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.CountDownLatch;
+import java.io.Serializable;
 
 /*
  * Modified from original in AOSP.
@@ -70,8 +71,6 @@ public class CropImageActivity extends MonitoredActivity {
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
         // Set default result code in case of a Back Button
-        setResult(RESULT_CANCELED);
-
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.crop__activity_crop);
         initViews();
@@ -129,6 +128,9 @@ public class CropImageActivity extends MonitoredActivity {
                 BitmapFactory.Options option = new BitmapFactory.Options();
                 option.inSampleSize = sampleSize;
                 initialBitmap = BitmapFactory.decodeStream(is, null, option);
+                if (initialBitmap == null) {
+                    throw new IOException("Bitmap could'nt be decoded - " + sourceUri.toString());
+                }
                 int drawHeight = initialBitmap.getHeight();
                 int drawWidth = initialBitmap.getWidth();
                 if ((exifRotation != 0) || (exifScale != 1)) {
@@ -434,6 +436,12 @@ public class CropImageActivity extends MonitoredActivity {
         return false;
     }
 
+    @Override
+    public void onBackPressed() {
+        setResult(RESULT_CANCELED);
+        super.onBackPressed();
+    }
+    
     public boolean isSaving() {
         return isSaving;
     }
@@ -443,7 +451,7 @@ public class CropImageActivity extends MonitoredActivity {
     }
 
     private void setResultException(Throwable throwable) {
-        setResult(Crop.RESULT_ERROR, new Intent().putExtra(Crop.Extra.ERROR, throwable));
+        setResult(Crop.RESULT_ERROR, new Intent().putExtra(Crop.Extra.ERROR, (Serializable) throwable));
     }
 
 }
