@@ -28,6 +28,7 @@ import android.opengl.GLES10;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.MediaStore;
+import android.util.Pair;
 import android.view.View;
 import android.view.Window;
 
@@ -53,6 +54,7 @@ public class CropImageActivity extends MonitoredActivity {
     private int maxX;
     private int maxY;
     private int exifRotation;
+    private int exifScale;
 
     private Uri sourceUri;
     private Uri saveUri;
@@ -60,7 +62,7 @@ public class CropImageActivity extends MonitoredActivity {
     private boolean isSaving;
 
     private int sampleSize;
-    private RotateBitmap rotateBitmap;
+    private Bitmap srcBitmap;
     private CropImageView imageView;
     private HighlightView cropView;
 
@@ -75,7 +77,7 @@ public class CropImageActivity extends MonitoredActivity {
         initViews();
 
         setupFromIntent();
-        if (rotateBitmap == null) {
+        if (srcBitmap == null) {
             finish();
             return;
         }
@@ -103,6 +105,7 @@ public class CropImageActivity extends MonitoredActivity {
     private void setupFromIntent() {
         Intent intent = getIntent();
         Bundle extras = intent.getExtras();
+        Bitmap initialBitmap ;
 
         if (extras != null) {
             aspectX = extras.getInt(Crop.Extra.ASPECT_X);
@@ -114,15 +117,32 @@ public class CropImageActivity extends MonitoredActivity {
 
         sourceUri = intent.getData();
         if (sourceUri != null) {
-            exifRotation = CropUtil.getExifRotation(CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri));
-
+            Pair<Integer,Integer> exifRotationTrans =
+                    CropUtil.getExifRotationTranslation(
+                            CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri));
+            exifRotation = exifRotationTrans.first;
+            exifScale = exifRotationTrans.second;
             InputStream is = null;
             try {
                 sampleSize = calculateBitmapSampleSize(sourceUri);
                 is = getContentResolver().openInputStream(sourceUri);
                 BitmapFactory.Options option = new BitmapFactory.Options();
                 option.inSampleSize = sampleSize;
-                rotateBitmap = new RotateBitmap(BitmapFactory.decodeStream(is, null, option), exifRotation);
+                initialBitmap = BitmapFactory.decodeStream(is, null, option);
+                int drawHeight = initialBitmap.getHeight();
+                int drawWidth = initialBitmap.getWidth();
+                if ((exifRotation != 0) || (exifScale != 1)) {
+                    Matrix matrix = new Matrix() ;
+                    if (exifRotation != 0) {
+                        matrix.preRotate(exifRotation);
+                    }
+                    if (exifScale != 1) {
+                        matrix.postScale(exifScale, 1);
+                    }
+                    srcBitmap = Bitmap.createBitmap(initialBitmap, 0, 0, drawWidth, drawHeight, matrix, true);
+                } else {
+                    srcBitmap = initialBitmap ;
+                }
             } catch (IOException e) {
                 Log.e("Error reading image: " + e.getMessage(), e);
                 setResultException(e);
@@ -132,6 +152,9 @@ public class CropImageActivity extends MonitoredActivity {
             } finally {
                 CropUtil.closeSilently(is);
             }
+        }
+        else {
+            Log.e("Source URI is null");
         }
     }
 
@@ -174,7 +197,7 @@ public class CropImageActivity extends MonitoredActivity {
         if (isFinishing()) {
             return;
         }
-        imageView.setImageRotateBitmapResetBase(rotateBitmap, true);
+        imageView.setImageBitmapResetBase(srcBitmap, true);
         CropUtil.startBackgroundJob(this, null, getResources().getString(R.string.crop__wait),
                 new Runnable() {
                     public void run() {
@@ -201,13 +224,13 @@ public class CropImageActivity extends MonitoredActivity {
     private class Cropper {
 
         private void makeDefault() {
-            if (rotateBitmap == null) {
+            if (srcBitmap == null) {
                 return;
             }
 
             HighlightView hv = new HighlightView(imageView);
-            final int width = rotateBitmap.getWidth();
-            final int height = rotateBitmap.getHeight();
+            final int width = srcBitmap.getWidth();
+            final int height = srcBitmap.getHeight();
 
             Rect imageRect = new Rect(0, 0, width, height);
 
@@ -259,6 +282,8 @@ public class CropImageActivity extends MonitoredActivity {
 
         int outWidth = width;
         int outHeight = height;
+        Log.e("Crop Width  = " + width);
+        Log.e("Crop Height = " + height);
         if (maxX > 0 && maxY > 0 && (width > maxX || height > maxY)) {
             float ratio = (float) width / (float) height;
             if ((float) maxX / (float) maxY > ratio) {
@@ -279,7 +304,7 @@ public class CropImageActivity extends MonitoredActivity {
         }
 
         if (croppedImage != null) {
-            imageView.setImageRotateBitmapResetBase(new RotateBitmap(croppedImage, exifRotation), true);
+            imageView.setImageBitmapResetBase(croppedImage, true);
             imageView.center(true, true);
             imageView.highlightViews.clear();
         }
@@ -302,22 +327,20 @@ public class CropImageActivity extends MonitoredActivity {
     }
 
     private Bitmap decodeRegionCrop(Rect rect, int outWidth, int outHeight) {
-        // Release memory now
-        clearImageView();
-
+	Matrix matrix = new Matrix();
         InputStream is = null;
         Bitmap croppedImage = null;
+        boolean transformed = false ;
         try {
             is = getContentResolver().openInputStream(sourceUri);
             BitmapRegionDecoder decoder = BitmapRegionDecoder.newInstance(is, false);
             final int width = decoder.getWidth();
             final int height = decoder.getHeight();
 
-            if (exifRotation != 0) {
-                // Adjust crop area to account for image rotation
-                Matrix matrix = new Matrix();
-                matrix.setRotate(-exifRotation);
-
+            if ((exifRotation != 0) || (exifScale != 1)) {
+                // Adjust crop area to account for EXIF transformation so what you crop is what you get
+                matrix.preRotate(-exifRotation);
+                matrix.postScale(exifScale, 1);
                 RectF adjusted = new RectF();
                 matrix.mapRect(adjusted, new RectF(rect));
 
@@ -327,11 +350,20 @@ public class CropImageActivity extends MonitoredActivity {
             }
 
             try {
+                matrix.reset();
                 croppedImage = decoder.decodeRegion(rect, new BitmapFactory.Options());
+                if ((exifRotation != 0) || (exifScale != 1)) {
+                    transformed = true;
+                    // Remove the EXIF transformation from the cropped image so we can dispense with it altogether
+                    matrix.preRotate(exifRotation);
+                    matrix.postScale(exifScale, 1);
+                }
                 if (rect.width() > outWidth || rect.height() > outHeight) {
-                    Matrix matrix = new Matrix();
-                    matrix.postScale((float) outWidth / rect.width(), (float) outHeight / rect.height());
-                    croppedImage = Bitmap.createBitmap(croppedImage, 0, 0, croppedImage.getWidth(), croppedImage.getHeight(), matrix, true);
+                    transformed = true ;
+                    matrix.postScale(((float)outWidth)/((float)rect.width()), ((float)outHeight)/((float)rect.height()));
+                }
+                if (transformed) {
+                  croppedImage = Bitmap.createBitmap(croppedImage, 0, 0, croppedImage.getWidth(), croppedImage.getHeight(), matrix, true);
                 }
             } catch (IllegalArgumentException e) {
                 // Rethrow with some extra information
@@ -347,14 +379,16 @@ public class CropImageActivity extends MonitoredActivity {
             setResultException(e);
         } finally {
             CropUtil.closeSilently(is);
+	    // Release memory now
+            clearImageView();
         }
         return croppedImage;
     }
 
     private void clearImageView() {
         imageView.clear();
-        if (rotateBitmap != null) {
-            rotateBitmap.recycle();
+        if (srcBitmap != null) {
+            srcBitmap.recycle();
         }
         System.gc();
     }
@@ -373,12 +407,6 @@ public class CropImageActivity extends MonitoredActivity {
             } finally {
                 CropUtil.closeSilently(outputStream);
             }
-
-            CropUtil.copyExifRotation(
-                    CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri),
-                    CropUtil.getFromMediaUri(this, getContentResolver(), saveUri)
-            );
-
             setResultUri(saveUri);
         }
 
@@ -396,8 +424,8 @@ public class CropImageActivity extends MonitoredActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (rotateBitmap != null) {
-            rotateBitmap.recycle();
+        if (srcBitmap != null) {
+            srcBitmap.recycle();
         }
     }
 
