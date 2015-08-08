@@ -19,7 +19,7 @@ android {
 }
 
 dependencies {
-    compile 'com.android.support:support-annotations:22.2.0'
+    compile 'com.android.support:support-annotations:22.+'
     compile 'com.android.support:support-v4:22.+'
     androidTestCompile 'com.squareup:fest-android:1.0.7'
     androidTestCompile 'com.android.support:support-v4:22.+'
