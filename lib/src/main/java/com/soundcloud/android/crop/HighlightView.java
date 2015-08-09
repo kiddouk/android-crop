@@ -149,6 +149,7 @@ class HighlightView {
             canvas.drawPath(path, outlinePaint);
 
             if (showThirds) {
+                drawOverlay(canvas);
                 drawThirds(canvas);
             }
 
@@ -202,17 +203,25 @@ class HighlightView {
 
     private void drawThirds(Canvas canvas) {
         outlinePaint.setStrokeWidth(1);
-        float xThird = (drawRect.right - drawRect.left) / 3;
-        float yThird = (drawRect.bottom - drawRect.top) / 3;
+        float xThird = (drawRect.right - drawRect.left) / 4;
         
         canvas.drawLine(drawRect.left + xThird, drawRect.top,
                 drawRect.left + xThird, drawRect.bottom, outlinePaint);
-        canvas.drawLine(drawRect.left + xThird * 2, drawRect.top,
-                drawRect.left + xThird * 2, drawRect.bottom, outlinePaint);
-        canvas.drawLine(drawRect.left, drawRect.top + yThird,
-                drawRect.right, drawRect.top + yThird, outlinePaint);
-        canvas.drawLine(drawRect.left, drawRect.top + yThird * 2,
-                drawRect.right, drawRect.top + yThird * 2, outlinePaint);
+        
+        canvas.drawLine(drawRect.left + xThird * 3, drawRect.top,
+                drawRect.left + xThird * 3, drawRect.bottom, outlinePaint);
+    }
+
+
+    private void drawOverlay(Canvas canvas) {
+        float xThird = (drawRect.right - drawRect.left) / 4;
+
+        Paint translucentPaint = new Paint();
+        translucentPaint.setARGB(80, 255, 255, 255);
+        translucentPaint.setStyle(Paint.Style.FILL);
+
+        canvas.drawRect(drawRect.left, drawRect.top, drawRect.left + xThird, drawRect.bottom, translucentPaint);
+        canvas.drawRect(drawRect.left + (xThird * 3), drawRect.top, drawRect.right, drawRect.bottom, translucentPaint);
     }
 
     private void drawCircle(Canvas canvas) {
