@@ -36,9 +36,4 @@
         <item name="android:text">@string/crop__done</item>
     </style>
 
-    <style name="Crop.ActionButtonText.Cancel">
-        <item name="android:drawableLeft">@drawable/crop__ic_cancel</item>
-        <item name="android:text">@string/crop__cancel</item>
-    </style>
-
 </resources>
