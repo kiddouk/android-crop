@@ -275,6 +275,14 @@ public class CropImageActivity extends MonitoredActivity {
         if (cropView == null || isSaving) {
             return;
         }
+
+        Intent intent = getIntent();
+        boolean coordinatesOnly = intent.getBooleanExtra(Crop.COORDINATES_ONLY, false);
+        if (coordinatesOnly == true) {
+            setResultCoordinates(cropView.getScaledCropRect(sampleSize));
+            finish();
+        }
+        
         isSaving = true;
 
         Bitmap croppedImage;
@@ -409,6 +417,11 @@ public class CropImageActivity extends MonitoredActivity {
             } finally {
                 CropUtil.closeSilently(outputStream);
             }
+            CropUtil.copyExifRotation(
+                    CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri),
+                    CropUtil.getFromMediaUri(this, getContentResolver(), saveUri)
+            );
+
             setResultUri(saveUri);
         }
 
@@ -444,6 +457,10 @@ public class CropImageActivity extends MonitoredActivity {
     
     public boolean isSaving() {
         return isSaving;
+    }
+
+    private void setResultCoordinates(Rect rect) {
+        setResult(RESULT_OK, new Intent().putExtra(Crop.CROPPING_COORDINATES, rect));
     }
 
     private void setResultUri(Uri uri) {
