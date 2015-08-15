@@ -31,18 +31,33 @@ import android.provider.MediaStore;
 import android.util.Pair;
 import android.view.View;
 import android.view.Window;
+import android.content.res.Configuration;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.CountDownLatch;
 import java.io.Serializable;
+import java.io.File;
+import java.io.FileNotFoundException;
+
+import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.Response;
+
+import okio.Okio;
+import okio.BufferedSink;
+
+import rx.Observable;
+import rx.android.schedulers.AndroidSchedulers;
+import rx.schedulers.Schedulers;
+import android.graphics.Point;
+
 
 /*
  * Modified from original in AOSP.
  */
 public class CropImageActivity extends MonitoredActivity {
-
     private static final int SIZE_DEFAULT = 2048;
     private static final int SIZE_LIMIT = 4096;
 
@@ -58,6 +73,8 @@ public class CropImageActivity extends MonitoredActivity {
     private int exifScale;
 
     private Uri sourceUri;
+    private Uri verticalSourceUri;
+    private Uri horizontalSourceUri;
     private Uri saveUri;
 
     private boolean isSaving;
@@ -76,53 +93,112 @@ public class CropImageActivity extends MonitoredActivity {
         initViews();
 
         setupFromIntent();
-        if (srcBitmap == null) {
-            finish();
-            return;
-        }
-        startCrop();
     }
 
     private void initViews() {
         imageView = (CropImageView) findViewById(R.id.crop_image);
         imageView.context = this;
         imageView.setRecycler(new ImageViewTouchBase.Recycler() {
-            @Override
-            public void recycle(Bitmap b) {
-                b.recycle();
-                System.gc();
-            }
-        });
+                @Override
+                public void recycle(Bitmap b) {
+                    b.recycle();
+                    System.gc();
+                }
+            });
 
         findViewById(R.id.btn_done).setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                onSaveClicked();
-            }
-        });
+                public void onClick(View v) {
+                    onSaveClicked();
+                }
+            });
     }
 
     private void setupFromIntent() {
         Intent intent = getIntent();
         Bundle extras = intent.getExtras();
-        Bitmap initialBitmap ;
 
-        if (extras != null) {
-            aspectX = extras.getInt(Crop.Extra.ASPECT_X);
-            aspectY = extras.getInt(Crop.Extra.ASPECT_Y);
-            maxX = extras.getInt(Crop.Extra.MAX_X);
-            maxY = extras.getInt(Crop.Extra.MAX_Y);
-            saveUri = extras.getParcelable(MediaStore.EXTRA_OUTPUT);
+        aspectX = extras.getInt(Crop.Extra.ASPECT_X);
+        aspectY = extras.getInt(Crop.Extra.ASPECT_Y);
+        maxX = extras.getInt(Crop.Extra.MAX_X);
+        maxY = extras.getInt(Crop.Extra.MAX_Y);
+        saveUri = extras.getParcelable(MediaStore.EXTRA_OUTPUT);
+
+        verticalSourceUri = extras.getParcelable(Crop.Extra.VERTICAL_SOURCE);
+        horizontalSourceUri = extras.getParcelable(Crop.Extra.HORIZONTAL_SOURCE);
+        if (horizontalSourceUri == null) {
+            horizontalSourceUri = sourceUri;
         }
 
-        sourceUri = intent.getData();
-        if (sourceUri != null) {
+        int orientation = getResources().getConfiguration().orientation;
+
+        if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+            sourceUri = verticalSourceUri;
+        } else {
+            sourceUri = horizontalSourceUri;
+        }
+        setBitmap(sourceUri);
+    }
+
+
+    private void setBitmap(Uri sourceUri) {
+        if (sourceUri == null) {
+            Log.e("Source is null");
+            finish();
+        }
+        Log.e(sourceUri.toString());
+        OkHttpClient client = new OkHttpClient();
+        switch (sourceUri.getScheme()) {
+        case "http":
+        case "https":
+            Log.e("GOT A STREAM");
+            Observable<String> downloadObservable = Observable.create(
+                sub -> {
+                    Request request = new Request.Builder().url(sourceUri.toString()).build();
+                    Log.e(request.toString());
+                    File downloadedFile = new File(getCacheDir(), "cache_file");
+                    try {
+                        Response response = client.newCall(request).execute();
+
+                        if (response.isSuccessful()) {
+                            BufferedSink sink = Okio.buffer(Okio.sink(downloadedFile));
+                            sink.writeAll(response.body().source());
+                            sink.close();
+                            sub.onNext(Uri.fromFile(downloadedFile).toString());
+                            sub.onCompleted();
+                        } else {
+                            sub.onError(new IOException());
+                        }
+                    } catch (FileNotFoundException e) {
+                        Log.e("File not found exception");
+                        sub.onError(e);
+                    } catch (IOException e) {
+                        Log.e("IOException Occured");
+                        sub.onError(e);
+                    }
+                });
+
+            downloadObservable
+                .subscribeOn(Schedulers.newThread())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(fileUri -> {
+                        setBitmap(Uri.parse(fileUri));
+                        Log.e(fileUri);
+                        Log.e("Download OK");
+                    },
+                    e -> Log.e("KABOOM"));
+
+            break;
+        
+        case "file":
+            Log.e("GOT A FILE");
             Pair<Integer,Integer> exifRotationTrans =
-                    CropUtil.getExifRotationTranslation(
-                            CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri));
+                CropUtil.getExifRotationTranslation(
+                  CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri));
             exifRotation = exifRotationTrans.first;
             exifScale = exifRotationTrans.second;
             InputStream is = null;
             try {
+                Bitmap initialBitmap ;
                 sampleSize = calculateBitmapSampleSize(sourceUri);
                 is = getContentResolver().openInputStream(sourceUri);
                 BitmapFactory.Options option = new BitmapFactory.Options();
@@ -154,12 +230,18 @@ public class CropImageActivity extends MonitoredActivity {
             } finally {
                 CropUtil.closeSilently(is);
             }
-        }
-        else {
-            Log.e("Source URI is null");
-        }
-    }
+            if (srcBitmap == null) {
+                finish();
+                return;
+            }
+            startCrop();
 
+            break;
+        }
+
+        
+    }
+    
     private int calculateBitmapSampleSize(Uri bitmapUri) throws IOException {
         InputStream is = null;
         BitmapFactory.Options options = new BitmapFactory.Options();
@@ -167,6 +249,7 @@ public class CropImageActivity extends MonitoredActivity {
         try {
             is = getContentResolver().openInputStream(bitmapUri);
             BitmapFactory.decodeStream(is, null, options); // Just get image size
+            Log.e("READ OK");
         } finally {
             CropUtil.closeSilently(is);
         }
@@ -201,26 +284,26 @@ public class CropImageActivity extends MonitoredActivity {
         }
         imageView.setImageBitmapResetBase(srcBitmap, true);
         CropUtil.startBackgroundJob(this, null, getResources().getString(R.string.crop__wait),
-                new Runnable() {
-                    public void run() {
-                        final CountDownLatch latch = new CountDownLatch(1);
-                        handler.post(new Runnable() {
-                            public void run() {
-                                if (imageView.getScale() == 1F) {
-                                    imageView.center(true, true);
-                                }
-                                latch.countDown();
-                            }
-                        });
-                        try {
-                            latch.await();
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                        new Cropper().crop();
-                    }
-                }, handler
-        );
+                                    new Runnable() {
+                                        public void run() {
+                                            final CountDownLatch latch = new CountDownLatch(1);
+                                            handler.post(new Runnable() {
+                                                    public void run() {
+                                                        if (imageView.getScale() == 1F) {
+                                                            imageView.center(true, true);
+                                                        }
+                                                        latch.countDown();
+                                                    }
+                                                });
+                                            try {
+                                                latch.await();
+                                            } catch (InterruptedException e) {
+                                                throw new RuntimeException(e);
+                                            }
+                                            new Cropper().crop();
+                                        }
+                                    }, handler
+                                    );
     }
 
     private class Cropper {
@@ -239,7 +322,7 @@ public class CropImageActivity extends MonitoredActivity {
             // Make the default size about 4/5 of the width or height
             int cropWidth = Math.min(width, height) * 4 / 5;
             @SuppressWarnings("SuspiciousNameCombination")
-            int cropHeight = cropWidth;
+                int cropHeight = cropWidth;
 
             if (aspectX != 0 && aspectY != 0) {
                 if (aspectX > aspectY) {
@@ -259,15 +342,15 @@ public class CropImageActivity extends MonitoredActivity {
 
         public void crop() {
             handler.post(new Runnable() {
-                public void run() {
-                    makeDefault();
-                    imageView.invalidate();
-                    if (imageView.highlightViews.size() == 1) {
-                        cropView = imageView.highlightViews.get(0);
-                        cropView.setFocus(true);
+                    public void run() {
+                        makeDefault();
+                        imageView.invalidate();
+                        if (imageView.highlightViews.size() == 1) {
+                            cropView = imageView.highlightViews.get(0);
+                            cropView.setFocus(true);
+                        }
                     }
-                }
-            });
+                });
         }
     }
 
@@ -277,10 +360,12 @@ public class CropImageActivity extends MonitoredActivity {
         }
 
         Intent intent = getIntent();
-        boolean coordinatesOnly = intent.getBooleanExtra(Crop.COORDINATES_ONLY, false);
+        boolean coordinatesOnly = intent.getBooleanExtra(Crop.Extra.COORDINATES_ONLY, false);
         if (coordinatesOnly == true) {
-            setResultCoordinates(cropView.getScaledCropRect(sampleSize));
+            Log.e("SENDING COORDINATES");
+            setResultCoordinates(cropView.getScaledCropRect(sampleSize), new Point(srcBitmap.getWidth(), srcBitmap.getHeight()));
             finish();
+            return;
         }
         
         isSaving = true;
@@ -325,19 +410,19 @@ public class CropImageActivity extends MonitoredActivity {
         if (croppedImage != null) {
             final Bitmap b = croppedImage;
             CropUtil.startBackgroundJob(this, null, getResources().getString(R.string.crop__saving),
-                    new Runnable() {
-                        public void run() {
-                            saveOutput(b);
-                        }
-                    }, handler
-            );
+                                        new Runnable() {
+                                            public void run() {
+                                                saveOutput(b);
+                                            }
+                                        }, handler
+                                        );
         } else {
             finish();
         }
     }
 
     private Bitmap decodeRegionCrop(Rect rect, int outWidth, int outHeight) {
-	Matrix matrix = new Matrix();
+        Matrix matrix = new Matrix();
         InputStream is = null;
         Bitmap croppedImage = null;
         boolean transformed = false ;
@@ -373,12 +458,12 @@ public class CropImageActivity extends MonitoredActivity {
                     matrix.postScale(((float)outWidth)/((float)rect.width()), ((float)outHeight)/((float)rect.height()));
                 }
                 if (transformed) {
-                  croppedImage = Bitmap.createBitmap(croppedImage, 0, 0, croppedImage.getWidth(), croppedImage.getHeight(), matrix, true);
+                    croppedImage = Bitmap.createBitmap(croppedImage, 0, 0, croppedImage.getWidth(), croppedImage.getHeight(), matrix, true);
                 }
             } catch (IllegalArgumentException e) {
                 // Rethrow with some extra information
                 throw new IllegalArgumentException("Rectangle " + rect + " is outside of the image ("
-                        + width + "," + height + "," + exifRotation + ")", e);
+                                                   + width + "," + height + "," + exifRotation + ")", e);
             }
 
         } catch (IOException e) {
@@ -389,7 +474,7 @@ public class CropImageActivity extends MonitoredActivity {
             setResultException(e);
         } finally {
             CropUtil.closeSilently(is);
-	    // Release memory now
+            // Release memory now
             clearImageView();
         }
         return croppedImage;
@@ -418,20 +503,20 @@ public class CropImageActivity extends MonitoredActivity {
                 CropUtil.closeSilently(outputStream);
             }
             CropUtil.copyExifRotation(
-                    CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri),
-                    CropUtil.getFromMediaUri(this, getContentResolver(), saveUri)
-            );
+                                      CropUtil.getFromMediaUri(this, getContentResolver(), sourceUri),
+                                      CropUtil.getFromMediaUri(this, getContentResolver(), saveUri)
+                                      );
 
             setResultUri(saveUri);
         }
 
         final Bitmap b = croppedImage;
         handler.post(new Runnable() {
-            public void run() {
-                imageView.clear();
-                b.recycle();
-            }
-        });
+                public void run() {
+                    imageView.clear();
+                    b.recycle();
+                }
+            });
 
         finish();
     }
@@ -459,8 +544,14 @@ public class CropImageActivity extends MonitoredActivity {
         return isSaving;
     }
 
-    private void setResultCoordinates(Rect rect) {
-        setResult(RESULT_OK, new Intent().putExtra(Crop.CROPPING_COORDINATES, rect));
+    private void setResultCoordinates(Rect rect, Point imageSize) {
+        Intent i = new Intent();
+        Log.e("You cropped");
+        Log.e(rect.toString());
+        i.putExtra(Crop.Extra.CROPPING_COORDINATES, rect);
+        i.putExtra(Crop.Extra.IMAGE_SIZE, imageSize);
+        setResult(RESULT_OK, i);
+       
     }
 
     private void setResultUri(Uri uri) {

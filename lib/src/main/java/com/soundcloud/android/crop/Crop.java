@@ -19,8 +19,6 @@ public class Crop {
     public static final int REQUEST_PICK = 9162;
     public static final int RESULT_ERROR = 404;
 
-    public static final String COORDINATES_ONLY = "coordinates_only";
-    public static final String CROPPING_COORDINATES = "coordinates";
 
     public static interface Extra {
         String ASPECT_X = "aspect_x";
@@ -28,9 +26,22 @@ public class Crop {
         String MAX_X = "max_x";
         String MAX_Y = "max_y";
         String ERROR = "error";
+        String HORIZONTAL_SOURCE = "horizontal_source";
+        String VERTICAL_SOURCE = "vertical_source";
+        String COORDINATES_ONLY = "coordinates_only";
+        String CROPPING_COORDINATES = "coordinates";
+        String IMAGE_SIZE = "image_size";
     }
 
     private Intent cropIntent;
+
+    public static Crop of(Uri source, Uri destination) {
+        return new Crop(source, destination);
+    }
+
+    public static Crop of(Uri verticalUri, Uri horizontalUri, Uri destination) {
+        return new Crop(verticalUri, horizontalUri, destination);
+    }
 
     /**
      * Create a crop Intent builder with source and destination image Uris
@@ -38,13 +49,16 @@ public class Crop {
      * @param source Uri for image to crop
      * @param destination Uri for saving the cropped image
      */
-    public static Crop of(Uri source, Uri destination) {
-        return new Crop(source, destination);
+    private Crop(Uri source, Uri destination) {
+        this(source, null, destination);
     }
 
-    private Crop(Uri source, Uri destination) {
+    private Crop(Uri verticalSource, Uri horizontalSource, Uri destination) {
         cropIntent = new Intent();
-        cropIntent.setData(source);
+        cropIntent.putExtra(Extra.VERTICAL_SOURCE, verticalSource);
+        if (horizontalSource != null) {
+            cropIntent.putExtra(Extra.HORIZONTAL_SOURCE, horizontalSource);
+        }
         cropIntent.putExtra(MediaStore.EXTRA_OUTPUT, destination);
     }
 
@@ -81,6 +95,12 @@ public class Crop {
         return this;
     }
 
+    public Crop withCoordinatesOnly() {
+        cropIntent.putExtra(Extra.COORDINATES_ONLY, true);
+        return this;
+    }
+
+
     /**
      * Send the crop Intent from an Activity
      *
@@ -91,36 +111,13 @@ public class Crop {
     }
 
     /**
-     * Send the crop Intent from an Activity
-     *
-     * @param activity Activity to receive result
-     */
-    public void start(Activity activity, boolean coordinatesOnly) {
-        start(activity, REQUEST_CROP, coordinatesOnly);
-    }
-
-    /**
-     * Send the crop Intent from an Activity with a custom requestCode
-     *
-     * @param activity Activity to receive result
-     * @param requestCode requestCode for result
-     */
-    public void start(Activity activity, int requestCode) {
-        start(activity, requestCode, false);
-    }
-
-    /**
      * Send the crop Intent from an Activity with a custom requestCode
      *
      * @param activity Activity to receive result
      * @param requestCode requestCode for result
      * @param coordinatesOnly boolean to get only the cropping coordinates or the full cropped image.
      */
-    public void start(Activity activity, int requestCode, boolean coordinatesOnly) {
-        Bundle b = new Bundle();
-        b.putBoolean(COORDINATES_ONLY, coordinatesOnly);
-        Intent i = getIntent(activity);
-        i.putExtras(b);
+    public void start(Activity activity, int requestCode) {
         activity.startActivityForResult(getIntent(activity), requestCode);
     }
 

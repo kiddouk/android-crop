@@ -1,6 +1,8 @@
 apply plugin: 'com.android.library'
 apply plugin: 'maven'
 apply plugin: 'signing'
+apply plugin: 'me.tatarka.retrolambda'
+
 //apply from: '../.publishing/sonatype.gradle'
 
 archivesBaseName = 'android-crop'
@@ -21,10 +23,15 @@ android {
 dependencies {
     compile 'com.android.support:support-annotations:22.+'
     compile 'com.android.support:support-v4:22.+'
+    compile 'com.squareup.okio:okio:1.5.0'
+    compile 'com.squareup.okhttp:okhttp:2.4.0'
+    compile 'io.reactivex:rxandroid:0.25.0'
+
     androidTestCompile 'com.squareup:fest-android:1.0.7'
     androidTestCompile 'com.android.support:support-v4:22.+'
     androidTestCompile 'org.mockito:mockito-core:1.9.5'
     androidTestCompile 'com.google.dexmaker:dexmaker:1.0'
     androidTestCompile 'com.google.dexmaker:dexmaker-mockito:1.0'
+
 }
 
