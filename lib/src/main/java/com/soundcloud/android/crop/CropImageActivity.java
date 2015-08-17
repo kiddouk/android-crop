@@ -52,6 +52,7 @@ import rx.Observable;
 import rx.android.schedulers.AndroidSchedulers;
 import rx.schedulers.Schedulers;
 import android.graphics.Point;
+import android.app.ProgressDialog;
 
 
 /*
@@ -155,6 +156,7 @@ public class CropImageActivity extends MonitoredActivity {
         case "http":
         case "https":
             Log.e("GOT A STREAM");
+            ProgressDialog dialog = ProgressDialog.show(this, null, getResources().getString(R.string.crop__wait), true, false);
             Observable<String> downloadObservable = Observable.create(
                 sub -> {
                     Request request = new Request.Builder().url(sourceUri.toString()).build();
@@ -178,7 +180,10 @@ public class CropImageActivity extends MonitoredActivity {
                     } catch (IOException e) {
                         Log.e("IOException Occured");
                         sub.onError(e);
+                    } finally {
+                        dialog.dismiss();
                     }
+
                 });
 
             downloadObservable
@@ -208,6 +213,7 @@ public class CropImageActivity extends MonitoredActivity {
                 BitmapFactory.Options option = new BitmapFactory.Options();
                 option.inSampleSize = sampleSize;
                 initialBitmap = BitmapFactory.decodeStream(is, null, option);
+                
                 if (initialBitmap == null) {
                     throw new IOException("Bitmap could'nt be decoded - " + sourceUri.toString());
                 }
