@@ -84,6 +84,10 @@ public class CropImageActivity extends MonitoredActivity {
     private CropImageView imageView;
     private HighlightView cropView;
 
+
+    // Saved info for return results
+    private Point imageDimensions;
+    
     @Override
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
@@ -259,6 +263,8 @@ public class CropImageActivity extends MonitoredActivity {
         while (options.outHeight / sampleSize > maxSize || options.outWidth / sampleSize > maxSize) {
             sampleSize = sampleSize << 1;
         }
+
+        imageDimensions = new Point(options.outWidth, options.outHeight);
         return sampleSize;
     }
 
@@ -363,7 +369,7 @@ public class CropImageActivity extends MonitoredActivity {
         boolean coordinatesOnly = intent.getBooleanExtra(Crop.Extra.COORDINATES_ONLY, false);
         if (coordinatesOnly == true) {
             Log.e("SENDING COORDINATES");
-            setResultCoordinates(cropView.getScaledCropRect(sampleSize), new Point(srcBitmap.getWidth(), srcBitmap.getHeight()));
+            setResultCoordinates(cropView.getScaledCropRect(sampleSize), imageDimensions);
             finish();
             return;
         }
