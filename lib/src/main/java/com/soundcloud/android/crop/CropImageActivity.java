@@ -73,6 +73,9 @@ public class CropImageActivity extends MonitoredActivity {
     private int exifRotation;
     private int exifScale;
 
+    // http stuff
+    private String token;
+
     private Uri sourceUri;
     private Uri verticalSourceUri;
     private Uri horizontalSourceUri;
@@ -126,6 +129,7 @@ public class CropImageActivity extends MonitoredActivity {
         aspectY = extras.getInt(Crop.Extra.ASPECT_Y);
         maxX = extras.getInt(Crop.Extra.MAX_X);
         maxY = extras.getInt(Crop.Extra.MAX_Y);
+        token = extras.getString(Crop.Extra.AUTHENTICATION_TOKEN);
         saveUri = extras.getParcelable(MediaStore.EXTRA_OUTPUT);
 
         verticalSourceUri = extras.getParcelable(Crop.Extra.VERTICAL_SOURCE);
@@ -151,7 +155,7 @@ public class CropImageActivity extends MonitoredActivity {
             finish();
         }
         Log.e(sourceUri.toString());
-        OkHttpClient client = new OkHttpClient();
+        OkHttpClient client = AuthenticatedHttpClient.getInstance(token);
         switch (sourceUri.getScheme()) {
         case "http":
         case "https":

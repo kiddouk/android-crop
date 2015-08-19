@@ -25,6 +25,7 @@ public class Crop {
         String ASPECT_Y = "aspect_y";
         String MAX_X = "max_x";
         String MAX_Y = "max_y";
+        String AUTHENTICATION_TOKEN = "token";
         String ERROR = "error";
         String HORIZONTAL_SOURCE = "horizontal_source";
         String VERTICAL_SOURCE = "vertical_source";
@@ -100,6 +101,11 @@ public class Crop {
         return this;
     }
 
+
+    public Crop setAuthenticationToken(String token) {
+        cropIntent.putExtra(Extra.AUTHENTICATION_TOKEN, token);
+        return this;
+    }
 
     /**
      * Send the crop Intent from an Activity
