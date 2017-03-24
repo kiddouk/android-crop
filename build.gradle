@@ -1,17 +1,16 @@
 buildscript {
     repositories {
         mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:1.2.2'
+        jcenter()
     }
 }
 
-allprojects {
+Allprojects {
     group = 'com.soundcloud.android'
     version = project.VERSION
 
     repositories {
         mavenCentral()
+        jcenter()
     }
 }
