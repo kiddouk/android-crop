@@ -5,7 +5,7 @@ buildscript {
     }
 }
 
-Allprojects {
+allprojects {
     group = 'com.soundcloud.android'
     version = project.VERSION
 
