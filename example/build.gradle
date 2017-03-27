@@ -3,8 +3,8 @@ apply plugin: 'com.android.application'
 archivesBaseName = 'android-crop-example'
 
 android {
-    compileSdkVersion 21
-    buildToolsVersion '21.1.2'
+    compileSdkVersion 25
+    buildToolsVersion '25.0.2'
 
     defaultConfig {
         minSdkVersion 14
