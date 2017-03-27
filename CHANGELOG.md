@@ -1,3 +1,7 @@
+## 1.0.1
+
+* Upgrade to latest SDK 25.
+
 ## 1.0.0
 
 * Improved builder interface: `Crop.of(in, out).start(activity)`
